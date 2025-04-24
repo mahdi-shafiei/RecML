@@ -77,6 +77,7 @@ class KerasOrbaxCheckpointManager(ocp.CheckpointManager):
         metrics_variables=False,
     )
     logging.info("Writing checkpoint for epoch %s...", epoch)
+
     self.save(step=epoch, items=state, metrics=logs)
 
   def restore_model_variables(self, model: keras.Model, epoch: int):
