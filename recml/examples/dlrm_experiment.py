@@ -73,10 +73,14 @@ class FeatureSet(Generic[FeatureT]):
       )
 
   def dense_features(self) -> FeatureSet[DenseFeature]:
-    return FeatureSet([f for f in self if isinstance(f, DenseFeature)])
+    return FeatureSet[DenseFeature](
+        [f for f in self if isinstance(f, DenseFeature)]
+    )
 
   def sparse_features(self) -> FeatureSet[SparseFeature]:
-    return FeatureSet([f for f in self if isinstance(f, SparseFeature)])
+    return FeatureSet[SparseFeature](
+        [f for f in self if isinstance(f, SparseFeature)]
+    )
 
   def __iter__(self) -> Iterator[FeatureT]:
     return iter(self.features)

@@ -25,6 +25,13 @@ import keras_hub
 import numpy as np
 from recml.core.utils import keras_utils
 
+_LEARNING_RATE_SCHEDULE = keras.optimizers.schedules.PolynomialDecay(
+    initial_learning_rate=0.1,
+    decay_steps=100,
+    end_learning_rate=0.01,
+    power=1.0,
+)
+
 
 def _create_model(input_shapes: Sequence[int]) -> keras.Model:
   model = keras_hub.models.BertMaskedLM(
@@ -39,7 +46,7 @@ def _create_model(input_shapes: Sequence[int]) -> keras.Model:
           dropout=0.1,
       )
   )
-  optimizer = keras.optimizers.Adam(learning_rate=0.1)
+  optimizer = keras.optimizers.Adam(learning_rate=_LEARNING_RATE_SCHEDULE)
   loss = keras.losses.SparseCategoricalCrossentropy()
   metrics = [keras.metrics.SparseCategoricalAccuracy()]
   model.compile(optimizer, loss, weighted_metrics=metrics)
@@ -241,6 +248,112 @@ class KerasUtilsTest(parameterized.TestCase):
             keras.ops.convert_to_numpy(w2.value),
         )
         self.assertSequenceEqual(w1.dtype, w2.dtype)
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "restore_all_variables",
+          "restore_optimizer_vars": True,
+          "restore_steps": True,
+          "restore_iterations": True,
+          "expected_learning_rate": 0.01,
+          "expected_iterations": 100,
+          "expected_initial_epoch": 2,
+      },
+      {
+          "testcase_name": "restore_without_optimizer_vars",
+          "restore_optimizer_vars": False,
+          "restore_steps": True,
+          "restore_iterations": True,
+          "expected_learning_rate": 0.1,
+          "expected_iterations": 0,
+          "expected_initial_epoch": 2,
+      },
+      {
+          "testcase_name": "restore_without_steps",
+          "restore_optimizer_vars": True,
+          "restore_steps": False,
+          "restore_iterations": True,
+          "expected_learning_rate": 0.01,
+          "expected_iterations": 100,
+          "expected_initial_epoch": None,
+      },
+      {
+          "testcase_name": "restore_without_iterations",
+          "restore_optimizer_vars": True,
+          "restore_steps": True,
+          "restore_iterations": False,
+          "expected_learning_rate": 0.1,
+          "expected_iterations": 0,
+          "expected_initial_epoch": 2,
+      },
+      {
+          "testcase_name": "restore_only_model_variables",
+          "restore_optimizer_vars": False,
+          "restore_steps": False,
+          "restore_iterations": False,
+          "expected_learning_rate": 0.1,
+          "expected_iterations": 0,
+          "expected_initial_epoch": None,
+      },
+  )
+  def test_restore_keras_model_with_different_options(
+      self,
+      restore_optimizer_vars: bool,
+      restore_steps: bool,
+      restore_iterations: bool,
+      expected_learning_rate: float,
+      expected_iterations: int,
+      expected_initial_epoch: int | None,
+  ):
+    checkpoint_dir = self.create_tempdir().full_path
+    checkpointer = keras_utils.KerasOrbaxCheckpointManager(checkpoint_dir)
+    epoch = 1
+    dummy_inputs = {
+        "token_ids": jax.random.randint(
+            jax.random.key(0), (64, 128), minval=0, maxval=50_000
+        ),
+        "segment_ids": jax.random.randint(
+            jax.random.key(0), (64, 128), minval=0, maxval=7
+        ),
+        "padding_mask": jax.random.uniform(jax.random.key(0), (64, 128)),
+        "mask_positions": jax.random.randint(
+            jax.random.key(0), (64, 20), minval=0, maxval=128
+        ),
+    }
+
+    source_bert_pretrainer = _create_model(
+        jax.tree.map(jnp.shape, dummy_inputs)
+    )
+    source_bert_pretrainer.optimizer.iterations.assign(100)
+    source_state = source_bert_pretrainer._get_jax_state(  # pylint: disable=protected-access
+        trainable_variables=True,
+        non_trainable_variables=True,
+        optimizer_variables=True,
+    )
+    checkpointer.save(step=epoch, items=source_state)
+    checkpointer.wait_until_finished()
+
+    target_bert_pretrainer = _create_model(
+        jax.tree.map(jnp.shape, dummy_inputs)
+    )
+    keras_utils.restore_keras_model(
+        target_bert_pretrainer,
+        checkpoint_dir,
+        restore_optimizer_vars=restore_optimizer_vars,
+        restore_steps=restore_steps,
+        restore_iterations=restore_iterations,
+    )
+
+    self.assertEqual(
+        target_bert_pretrainer.optimizer.iterations.value, expected_iterations
+    )
+    self.assertEqual(
+        target_bert_pretrainer.optimizer.learning_rate,
+        expected_learning_rate,
+    )
+    self.assertEqual(
+        target_bert_pretrainer._initial_epoch, expected_initial_epoch
+    )
 
 
 if __name__ == "__main__":

@@ -183,6 +183,8 @@ def restore_keras_model(
     checkpoint_dir: str,
     step: int | None = None,
     restore_optimizer_vars: bool = True,
+    restore_steps: bool = True,
+    restore_iterations: bool = True,
 ):
   """Restores a Keras 3 Jax backend model from an Orbax checkpoint.
 
@@ -192,6 +194,14 @@ def restore_keras_model(
     step: The step to restore the model to. If `None` then the latest checkpoint
       will be restored.
     restore_optimizer_vars: Whether to restore the optimizer variables.
+    restore_steps: Whether to restore the model's steps. If `True` then the
+      model will continue training from the step the checkpoint was saved at. If
+      `False` then the model will start training from the first step.
+    restore_iterations: Whether to restore the model's iterations. If `True`
+      then the model will continue training from the iteration the checkpoint
+      was saved at. This is an optimizer variable used for controlling the
+      learning rate schedule. This is not supported if restore_optimizer_vars
+      is `False`.
 
   Raises:
     FileNotFoundError: If no checkpoints are found in the checkpoint directory.
@@ -273,10 +283,13 @@ def restore_keras_model(
       "non_trainable_variables": non_trainable_variables,
   }
   if restore_optimizer_vars:
-    model._initial_epoch = step + 1  # pylint: disable=protected-access
     optimizer_variables = restored_state[2]
     model._jax_state["optimizer_variables"] = optimizer_variables  # pylint: disable=protected-access
   model.jax_state_sync()
+  if restore_steps:
+    model._initial_epoch = step + 1  # pylint: disable=protected-access
+  if restore_optimizer_vars and not restore_iterations:
+    model.optimizer.iterations.assign(0)
 
 
 # TODO(b/343544467): Support logging metrics more frequently.
