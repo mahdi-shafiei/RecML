@@ -18,8 +18,8 @@ import functools
 from absl.testing import absltest
 from etils import epy
 import jax
-from recml.layers.linen import sparsecore
 from recml.core.training import partitioning
+from recml.layers.linen import sparsecore
 
 with epy.lazy_imports():
   from jax_tpu_embedding.sparsecore.lib.nn import embedding_spec  # pylint: disable=g-import-not-at-top

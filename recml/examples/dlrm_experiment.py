@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import jaxtyping as jt
 import numpy as np
 import optax
-from recml import core
+import recml
 from recml.layers.linen import sparsecore
 import tensorflow as tf
 
@@ -185,7 +185,7 @@ class DLRMModel(nn.Module):
     return predictions
 
 
-class CriteoFactory(core.Factory[tf.data.Dataset]):
+class CriteoFactory(recml.Factory[tf.data.Dataset]):
   """Data loader for dummy Criteo data optimized for Jax training."""
 
   features: FeatureSet
@@ -227,37 +227,35 @@ class CriteoFactory(core.Factory[tf.data.Dataset]):
 
 
 @dataclasses.dataclass
-class PredictionTask(core.JaxTask):
+class PredictionTask(recml.JaxTask):
   """Prediction task."""
 
   train_data: CriteoFactory
   eval_data: CriteoFactory
   model: DLRMModel
-  optimizer: core.Factory[optax.GradientTransformation]
+  optimizer: recml.Factory[optax.GradientTransformation]
 
-  def create_datasets(
-      self,
-  ) -> tuple[core.TFDatasetIterator, core.TFDatasetIterator]:
+  def create_datasets(self) -> tuple[recml.data.Iterator, recml.data.Iterator]:
     global_batch_size = self.train_data.global_batch_size
-    train_iter = core.TFDatasetIterator(
+    train_iter = recml.data.TFDatasetIterator(
         dataset=self.train_data.make(),
         postprocessor=self.model.embedder.make_preprocessor(global_batch_size),
     )
-    eval_iter = core.TFDatasetIterator(
+    eval_iter = recml.data.TFDatasetIterator(
         dataset=self.eval_data.make(),
         postprocessor=self.model.embedder.make_preprocessor(global_batch_size),
     )
     return train_iter, eval_iter
 
-  def create_state(self, batch: jt.PyTree, rng: jt.Array) -> core.JaxState:
+  def create_state(self, batch: jt.PyTree, rng: jt.Array) -> recml.JaxState:
     inputs, _ = batch
     params = self.model.init(rng, inputs)
     optimizer = self.optimizer.make()
-    return core.JaxState.create(params=params, tx=optimizer)
+    return recml.JaxState.create(params=params, tx=optimizer)
 
   def train_step(
-      self, batch: jt.PyTree, state: core.JaxState, rng: jt.Array
-  ) -> tuple[core.JaxState, Mapping[str, core.Metric]]:
+      self, batch: jt.PyTree, state: recml.JaxState, rng: jt.Array
+  ) -> tuple[recml.JaxState, Mapping[str, recml.Metric]]:
     inputs, label = batch
 
     def _loss_fn(params: jt.PyTree) -> tuple[jt.Scalar, jt.Array]:
@@ -270,29 +268,29 @@ class PredictionTask(core.JaxTask):
     state = state.update(grads=grads)
 
     metrics = {
-        'loss': core.metrics.scalar(loss),
-        'accuracy': core.metrics.binary_accuracy(label, logits, threshold=0.0),
-        'auc': core.metrics.aucpr(label, logits, from_logits=True),
-        'aucroc': core.metrics.aucroc(label, logits, from_logits=True),
-        'label/mean': core.metrics.mean(label),
-        'prediction/mean': core.metrics.mean(jax.nn.sigmoid(logits)),
+        'loss': recml.metrics.scalar(loss),
+        'accuracy': recml.metrics.binary_accuracy(label, logits, threshold=0.0),
+        'auc': recml.metrics.aucpr(label, logits, from_logits=True),
+        'aucroc': recml.metrics.aucroc(label, logits, from_logits=True),
+        'label/mean': recml.metrics.mean(label),
+        'prediction/mean': recml.metrics.mean(jax.nn.sigmoid(logits)),
     }
     return state, metrics
 
   def eval_step(
-      self, batch: jt.PyTree, state: core.JaxState
-  ) -> Mapping[str, core.Metric]:
+      self, batch: jt.PyTree, state: recml.JaxState
+  ) -> Mapping[str, recml.Metric]:
     inputs, label = batch
     logits = self.model.apply(state.params, inputs, training=False)
     loss = jnp.mean(optax.sigmoid_binary_cross_entropy(logits, label), axis=0)
 
     metrics = {
-        'loss': core.metrics.mean(loss),
-        'accuracy': core.metrics.binary_accuracy(label, logits, threshold=0.0),
-        'auc': core.metrics.aucpr(label, logits, from_logits=True),
-        'aucroc': core.metrics.aucroc(label, logits, from_logits=True),
-        'label/mean': core.metrics.mean(label),
-        'prediction/mean': core.metrics.mean(jax.nn.sigmoid(logits)),
+        'loss': recml.metrics.mean(loss),
+        'accuracy': recml.metrics.binary_accuracy(label, logits, threshold=0.0),
+        'auc': recml.metrics.aucpr(label, logits, from_logits=True),
+        'aucroc': recml.metrics.aucroc(label, logits, from_logits=True),
+        'label/mean': recml.metrics.mean(label),
+        'prediction/mean': recml.metrics.mean(jax.nn.sigmoid(logits)),
     }
     return metrics
 
@@ -344,7 +342,7 @@ def features() -> fdl.Config[FeatureSet]:
   )
 
 
-def experiment() -> fdl.Config[core.Experiment]:
+def experiment() -> fdl.Config[recml.Experiment]:
   """DLRM experiment."""
 
   feature_set = features()
@@ -375,17 +373,17 @@ def experiment() -> fdl.Config[core.Experiment]:
           dcn_inner_dim=512,
       ),
       optimizer=fdl.Config(
-          core.AdagradFactory,
+          recml.AdagradFactory,
           learning_rate=0.01,
           # Sparsecore embedding parameters are optimized in the backward pass.
           freeze_mask=rf'.*{sparsecore.EMBEDDING_PARAM_NAME}.*',
       ),
   )
   trainer = fdl.Config(
-      core.JaxTrainer,
-      partitioner=fdl.Config(core.DataParallelPartitioner),
+      recml.JaxTrainer,
+      partitioner=fdl.Config(recml.DataParallelPartitioner),
       train_steps=1_000,
       steps_per_eval=100,
       steps_per_loop=100,
   )
-  return fdl.Config(core.Experiment, task=task, trainer=trainer)
+  return fdl.Config(recml.Experiment, task=task, trainer=trainer)

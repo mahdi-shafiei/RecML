@@ -298,14 +298,14 @@ class JaxTask(abc.ABC, Generic[StateT]):
   def create_datasets(self) -> core.DatasetT:
     """Creates training and evaluation datasets.
 
-    Returns:
+    Returns:`
       One of the following:
-        1) A `tf.data.Dataset` or CLU `DatasetIterator instance that will be
+        1) A `tf.data.Dataset` or `Iterator` instance that will be
            used for training.
-        2) A tuple of `tf.data.Dataset` or CLU `DatasetIterator` instances where
+        2) A tuple of `tf.data.Dataset` or `Iterator` instances where
            the first element is the training dataset and the second element is
            the evaluation dataset.
-        3) A tuple of `tf.data.Dataset` or CLU `DatasetIterator` instances where
+        3) A tuple of `tf.data.Dataset` or `Iterator` instances where
            the first element is the training dataset and the second element is a
            dictionary of evaluation datasets keyed by name.
     """
@@ -601,8 +601,8 @@ class JaxTrainer(core.Trainer[JaxTask]):
   def process_task(
       self, task: JaxTask, *, training: bool, check_for_checkpoints: bool
   ) -> tuple[
-      iterator_lib.DatasetIterator,
-      Mapping[str, iterator_lib.DatasetIterator],
+      iterator_lib.Iterator,
+      Mapping[str, iterator_lib.Iterator],
       State,
       partitioning.StepFn,
       partitioning.StepFn,

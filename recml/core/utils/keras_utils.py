@@ -191,8 +191,11 @@ def restore_keras_model(
   Args:
     model: The Keras model to restore.
     checkpoint_dir: The directory containing the Orbax checkpoints.
-    step: The step to restore the model to. If `None` then the latest checkpoint
-      will be restored.
+    step: The checkpoint step to resume training from. If set, it requires a
+      checkpoint with the same step number to be present in the model directory.
+      If not set, will resume training from the last checkpoint. Depending on
+      the value of `max_checkpoints_to_keep`, the model directory only contains
+      a certain number of the latest checkpoints.
     restore_optimizer_vars: Whether to restore the optimizer variables.
     restore_steps: Whether to restore the model's steps. If `True` then the
       model will continue training from the step the checkpoint was saved at. If

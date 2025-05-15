@@ -23,7 +23,7 @@ import numpy as np
 import tensorflow as tf
 
 
-DatasetIterator = clu_data.DatasetIterator
+Iterator = clu_data.DatasetIterator
 
 
 class TFDatasetIterator(clu_data.DatasetIterator):

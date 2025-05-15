@@ -18,7 +18,7 @@ import fiddle as fdl
 from fiddle import selectors
 import jax
 import numpy as np
-from recml import core
+import recml
 from recml.examples import dlrm_experiment
 
 
@@ -43,7 +43,7 @@ class DLRMExperimentTest(absltest.TestCase):
       cfg.embedding_dim = 8
 
     experiment = fdl.build(experiment)
-    core.run_experiment(experiment, core.Experiment.Mode.TRAIN_AND_EVAL)
+    recml.run_experiment(experiment, recml.Experiment.Mode.TRAIN_AND_EVAL)
 
 
 if __name__ == "__main__":
