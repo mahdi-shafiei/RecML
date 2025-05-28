@@ -23,6 +23,17 @@ from recml.layers.keras import utils
 
 class UtilsTest(testing.TestCase):
 
+  def test_clone_initializer(self):
+    random_initializer = keras.initializers.RandomNormal(stddev=1.0)
+    random_initializer_clone = utils.clone_initializer(random_initializer)
+    self.assertNotEqual(random_initializer.seed, random_initializer_clone.seed)
+
+    lecun_initializer = keras.initializers.LecunNormal(seed=1)
+    lecun_initializer_clone = utils.clone_initializer(lecun_initializer)
+    self.assertEqual(lecun_initializer.seed, lecun_initializer_clone.seed)
+
+    self.assertEqual(utils.clone_initializer("lecun_normal"), "lecun_normal")
+
   # Remember to read these sideways =))
   @parameterized.parameters(
       dict(

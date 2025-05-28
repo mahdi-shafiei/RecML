@@ -19,6 +19,13 @@ import keras
 Tensor = Any
 
 
+def clone_initializer(initializer: Any) -> Any:
+  """Clones an initializer."""
+  if isinstance(initializer, keras.initializers.Initializer):
+    return initializer.clone()
+  return initializer
+
+
 def make_attention_mask(mask: Tensor, dtype: str = "float32") -> Tensor:
   """Creates a 3D self-attention mask from a padding mask."""
   # Element wise pairwise function on [B, L, 1], [B, 1, L].
