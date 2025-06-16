@@ -381,7 +381,7 @@ class SparsecoreLayout(nn.Partitioned[A]):
 
   def get_sharding(self, _):
     assert self.mesh is not None
-    return layout.Layout(
+    return layout.Format(
         layout.DeviceLocalLayout(major_to_minor=(0, 1), _tiling=((8,),)),
         jax.sharding.NamedSharding(self.mesh, self.get_partition_spec()),
     )
