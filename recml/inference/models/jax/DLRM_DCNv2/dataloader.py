@@ -104,7 +104,7 @@ class CriteoDataLoader:
     self._embedding_threshold = embedding_threshold
     self._shuffle_buffer = shuffle_buffer
     self._prefetch_size = prefetch_size
-    self._cached_dummy_data = False
+    self._cached_dummy_data = None
 
     self.label_features = 'clicked'
     self.dense_features = [f'int-feature-{x}' for x in range(1, 14)]
