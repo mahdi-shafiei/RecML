@@ -30,6 +30,11 @@ import numpy as np
 from recml.core.ops import embedding_ops
 import tensorflow as tf
 
+if jax.__version_info__ >= (0, 6, 3):
+  DLL = layout.Layout
+else:
+  DLL = layout.DeviceLocalLayout  # type: ignore
+
 
 with epy.lazy_imports():
   # pylint: disable=g-import-not-at-top
@@ -382,7 +387,7 @@ class SparsecoreLayout(nn.Partitioned[A]):
   def get_sharding(self, _):
     assert self.mesh is not None
     return layout.Format(
-        layout.DeviceLocalLayout(major_to_minor=(0, 1), _tiling=((8,),)),
+        DLL(major_to_minor=(0, 1), _tiling=((8,),)),
         jax.sharding.NamedSharding(self.mesh, self.get_partition_spec()),
     )
 
