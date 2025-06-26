@@ -99,19 +99,19 @@ class DLRMModel(nn.Module):
   dcn_layers: int
   dcn_inner_dim: int
 
-  # We need to track the embedder on the Flax module to ensure it is not
-  # re-created on cloning. It is not possible to create an embedder inside
-  # setup() because it is called lazily at compile time. The embedder needs
+  # We need to track the sparsecore config on the Flax module to ensure it is
+  # not re-created on cloning. It is not possible to create an config inside
+  # setup() because it is called lazily at compile time. The config needs
   # to be created before `model.init` so we can use it to create a preprocessor.
-  # A simpler pattern that works is passing `embedder` directly to the module.
-  _embedder: sparsecore.SparsecoreEmbedder | None = None
+  # A simpler pattern that works is passing the config directly to the module.
+  _sparsecore_config: sparsecore.SparsecoreConfig | None = None
 
   @property
-  def embedder(self) -> sparsecore.SparsecoreEmbedder:
-    if self._embedder is not None:
-      return self._embedder
+  def sparsecore_config(self) -> sparsecore.SparsecoreConfig:
+    if self._sparsecore_config is not None:
+      return self._sparsecore_config
 
-    embedder = sparsecore.SparsecoreEmbedder(
+    sparsecore_config = sparsecore.SparsecoreConfig(
         specs={
             f.name: sparsecore.EmbeddingSpec(
                 input_dim=f.vocab_size,
@@ -123,8 +123,8 @@ class DLRMModel(nn.Module):
         },
         optimizer=self.embedding_optimizer,
     )
-    object.__setattr__(self, '_embedder', embedder)
-    return embedder
+    object.__setattr__(self, '_sparsecore_config', sparsecore_config)
+    return sparsecore_config
 
   def bottom_mlp(self, inputs: Mapping[str, jt.Array]) -> jt.Array:
     x = jnp.concatenate(
@@ -174,7 +174,9 @@ class DLRMModel(nn.Module):
       self, inputs: Mapping[str, jt.Array], training: bool = False
   ) -> jt.Array:
     dense_embeddings = self.bottom_mlp(inputs)
-    sparse_embeddings = self.embedder.make_sparsecore_module()(inputs)
+    sparse_embeddings = sparsecore.SparsecoreEmbed(
+        self.sparsecore_config, name='sparsecore_embed'
+    )(inputs)
     sparse_embeddings = jax.tree.flatten(sparse_embeddings)[0]
     concatenated_embeddings = jnp.concatenate(
         (dense_embeddings, *sparse_embeddings), axis=-1
@@ -239,11 +241,15 @@ class PredictionTask(recml.JaxTask):
     global_batch_size = self.train_data.global_batch_size
     train_iter = recml.data.TFDatasetIterator(
         dataset=self.train_data.make(),
-        postprocessor=self.model.embedder.make_preprocessor(global_batch_size),
+        postprocessor=sparsecore.SparsecorePreprocessor(
+            self.model.sparsecore_config, global_batch_size
+        ),
     )
     eval_iter = recml.data.TFDatasetIterator(
         dataset=self.eval_data.make(),
-        postprocessor=self.model.embedder.make_preprocessor(global_batch_size),
+        postprocessor=sparsecore.SparsecorePreprocessor(
+            self.model.sparsecore_config, global_batch_size
+        ),
     )
     return train_iter, eval_iter
 

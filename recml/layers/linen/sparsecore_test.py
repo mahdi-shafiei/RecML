@@ -18,8 +18,10 @@ import functools
 from absl.testing import absltest
 from etils import epy
 import jax
+import numpy as np
 from recml.core.training import partitioning
 from recml.layers.linen import sparsecore
+import tensorflow as tf
 
 with epy.lazy_imports():
   from jax_tpu_embedding.sparsecore.lib.nn import embedding_spec  # pylint: disable=g-import-not-at-top
@@ -31,38 +33,43 @@ class SparsecoreTest(absltest.TestCase):
     if jax.devices()[0].platform != "tpu":
       self.skipTest("Test only supported on TPUs.")
 
-    k1, k2, k3, k4 = jax.random.split(jax.random.key(0), 4)
+    tf.random.set_seed(0)
 
     inputs = {
-        "a": jax.random.randint(k1, (32, 16), minval=1, maxval=100),
-        "b": jax.random.randint(k2, (32, 16), minval=1, maxval=100),
-        "w": jax.random.normal(k3, (32, 16)),
+        "a": tf.random.uniform(
+            shape=(32, 16), minval=1, maxval=100, dtype=tf.int64
+        ),
+        "b": tf.random.uniform(
+            shape=(32, 16), minval=1, maxval=100, dtype=tf.int64
+        ),
+        "w": tf.random.normal(shape=(32, 16), dtype=tf.float32),
     }
 
     dp_partitioner = partitioning.DataParallelPartitioner()
-    embedder = sparsecore.SparsecoreEmbedder(
+    sparsecore_config = sparsecore.SparsecoreConfig(
         specs={
             "a": sparsecore.EmbeddingSpec(
                 input_dim=100,
-                embedding_dim=16,
+                embedding_dim=64,
                 combiner="mean",
                 weight_name="w",
             ),
             "b": sparsecore.EmbeddingSpec(
                 input_dim=100,
-                embedding_dim=16,
-                max_sequence_length=10,
+                embedding_dim=64,
+                max_sequence_length=16,
             ),
         },
         optimizer=embedding_spec.AdagradOptimizerSpec(learning_rate=0.01),
     )
-    preprocessor = embedder.make_preprocessor(32)
-    layer = embedder.make_sparsecore_module()
+    preprocessor = sparsecore.SparsecorePreprocessor(sparsecore_config, 32)
+    layer = sparsecore.SparsecoreEmbed(sparsecore_config)
 
     sc_inputs = dp_partitioner.shard_inputs(preprocessor(inputs))
-    sc_vars = dp_partitioner.partition_init(functools.partial(layer.init, k4))(
-        sc_inputs
-    )
+    sc_vars = dp_partitioner.partition_init(
+        functools.partial(layer.init, jax.random.key(0)),
+        abstract_batch=sc_inputs,
+    )(sc_inputs)
 
     def step(inputs, params):
       return layer.apply(params, inputs)
@@ -70,8 +77,33 @@ class SparsecoreTest(absltest.TestCase):
     p_step = dp_partitioner.partition_step(step, training=False)
     sparsecore_activations = jax.device_get(p_step(sc_inputs, sc_vars))
 
-    self.assertEqual(sparsecore_activations["a"].shape, (32, 16))
-    self.assertEqual(sparsecore_activations["b"].shape, (32, 10, 16))
+    self.assertEqual(sparsecore_activations["a"].shape, (32, 64))
+    self.assertEqual(sparsecore_activations["b"].shape, (32, 16, 64))
+
+    tables = sparsecore.fetch_tables(
+        sparsecore_config,
+        sc_vars["params"][sparsecore.EMBEDDING_PARAM_NAME],
+        donate=False,
+    )
+
+    activations = sparsecore.cpu_lookup(sparsecore_config, tables, inputs)
+    np.testing.assert_allclose(
+        sparsecore_activations["a"], activations["a"], rtol=1e-5, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        sparsecore_activations["b"], activations["b"], rtol=1e-5, atol=1e-5
+    )
+
+    np.testing.assert_allclose(
+        sparsecore.gather_table(
+            sparsecore_config,
+            sc_vars["params"][sparsecore.EMBEDDING_PARAM_NAME],
+            "a",
+        ),
+        tables["a"],
+        rtol=1e-5,
+        atol=1e-5,
+    )
 
 
 if __name__ == "__main__":

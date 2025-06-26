@@ -38,7 +38,7 @@ class SparsecoreParams:
   """Embedding parameters."""
 
   feature_specs: Nested[FeatureSpec]
-  abstract_mesh: jax.sharding.AbstractMesh
+  mesh: jax.sharding.Mesh | jax.sharding.AbstractMesh
   data_axes: Sequence[str | None]
   embedding_axes: Sequence[str | None]
   sharding_strategy: str
@@ -53,11 +53,11 @@ def sparsecore_lookup(
   return shard_map.shard_map(
       functools.partial(
           embedding.tpu_sparse_dense_matmul,
-          global_device_count=sparsecore_params.abstract_mesh.size,
+          global_device_count=sparsecore_params.mesh.size,
           feature_specs=sparsecore_params.feature_specs,
           sharding_strategy=sparsecore_params.sharding_strategy,
       ),
-      mesh=sparsecore_params.abstract_mesh,
+      mesh=sparsecore_params.mesh,
       in_specs=(
           jax.sharding.PartitionSpec(*sparsecore_params.data_axes),
           jax.sharding.PartitionSpec(*sparsecore_params.embedding_axes),
@@ -90,7 +90,7 @@ def _emb_lookup_bwd(
           feature_specs=sparsecore_params.feature_specs,
           sharding_strategy=sparsecore_params.sharding_strategy,
       ),
-      mesh=sparsecore_params.abstract_mesh,
+      mesh=sparsecore_params.mesh,
       in_specs=(
           jax.sharding.PartitionSpec(*sparsecore_params.data_axes),
           jax.sharding.PartitionSpec(*sparsecore_params.data_axes),

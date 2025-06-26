@@ -20,7 +20,6 @@ from typing import Any, ContextManager
 
 import flax.linen as nn
 import jax
-from jax.experimental import mesh_utils
 import numpy as np
 
 
@@ -68,7 +67,7 @@ class DataParallelPartitioner(Partitioner):
   """Data parallel partitioner."""
 
   def __init__(self, data_axis: str = "batch"):
-    self.mesh = jax.sharding.Mesh(jax.devices(), (data_axis,))
+    self.mesh = jax.make_mesh((jax.device_count(),), (data_axis,))
     self.data_sharding = jax.sharding.NamedSharding(
         self.mesh, jax.sharding.PartitionSpec(data_axis)
     )
@@ -109,6 +108,12 @@ class DataParallelPartitioner(Partitioner):
       self, init_fn: CreateStateFn, *, abstract_batch: PyTree | None = None
   ) -> CreateStateFn:
     with jax.sharding.use_mesh(self.mesh):
+      if abstract_batch is not None:
+        abstract_state = jax.eval_shape(init_fn, abstract_batch)
+        specs = nn.get_partition_spec(abstract_state)
+        self.state_sharding = jax.tree.map(
+            lambda x: jax.sharding.NamedSharding(self.mesh, x), specs
+        )
       init_fn = jax.jit(init_fn, out_shardings=self.state_sharding)
 
     def _wrapped_init(batch: PyTree) -> State:
@@ -145,12 +150,12 @@ class ModelParallelPartitioner(Partitioner):
   This only works with multi-controller Jax, i.e. communications along the ICI
   for TPUs. For scaling beyond a single TPU slice this needs to be extended to
   support Megascale XLA or single-controller Pathways. Consider using T5X, Pax,
-  or Gemax for these use cases.
+  MaxText externally or Gemax internally for these use cases.
 
-  Note: This assumes that all axes of the inputs except the final one are used
-  for data parallelism while the final one is used for model parallelism.
-  This tends to work well for 2D and 3D torus topologies since network latency
-  tends to be much higher for the leading axes.
+  By default, all axes of the input are used for data parallelism. This results
+  in fully-sharded data-parallelism for ND topologies or data-parallelism for 1D
+  topologies. The range of axes can be configured using the `dp_axes` argument,
+  i.e. axes[:dp_axes] will be used for data parallelism.
 
   IMPORTANT: `shard_inputs` operates on a per process batch. This means that the
   input batch size on CPU must already be the per process batch size,
@@ -160,45 +165,49 @@ class ModelParallelPartitioner(Partitioner):
 
   def __init__(
       self,
-      axes: Sequence[tuple[str, int]],
+      axes: Sequence[tuple[str, int]] = (("batch", -1),),
+      dp_axes: int | None = None,
       rules: Mapping[str, str] | None = None,
       aot_compile: bool = False,
       options: jax.stages.CompilerOptions | None = None,
+      devices: Sequence[jax.Device] | None = None,
   ):
-    if len(axes) < 2:
+    if not axes:
+      raise ValueError("At least one axis must be specified in `axes`.")
+    if dp_axes == 0:
       raise ValueError(
-          "`axes` cannot less than 2D, use data-parallel"
-          f" partitioner instead. Got axes: {axes}."
+          "Data parallelism axes range must be positive or negative."
       )
 
-    mesh_devices = mesh_utils.create_device_mesh([dim for _, dim, in axes])
-    self.mesh = jax.sharding.Mesh(mesh_devices, [axis for axis, _ in axes])
+    devices = devices if devices is not None else jax.devices()
+    axis_names = [axis for axis, _ in axes]
+    axis_sizes = [dim for _, dim in axes]
+    if any(dim <= 0 for dim in axis_sizes[1:]):
+      raise ValueError(
+          "All dimensions except the first in the axes must be positive"
+          f" integers. Got axes: {axes}."
+      )
+    if axis_sizes[0] == -1:
+      axis_sizes[0] = len(devices) // math.prod(axis_sizes[1:])
+
+    self.mesh = jax.make_mesh(axis_sizes, axis_names, devices=devices)
     self.rules = rules
     self.aot_compile = aot_compile
     self.options = options
 
-    dp_axes, dp_dims = zip(*axes[:-1])
-    _, mp_dim = axes[-1]
-
-    if math.prod(dp_dims) % jax.process_count() != 0:
+    dp_axis_names, dp_axis_sizes = zip(*axes[:dp_axes])
+    num_processes = jax.process_count()
+    if math.prod(dp_axis_sizes) % num_processes != 0:
       raise ValueError(
           "The data parallel dimensions in the mesh must be divisible by the"
           " number of processes as we assume data parallelism across"
-          f" processes. Got process count: {jax.process_count()} and data"
-          f" parallelism dimensions: {dp_dims} for axes: {axes} and mesh"
-          f" devices: {self.mesh.devices}."
-      )
-    if jax.local_device_count() % mp_dim != 0:
-      raise ValueError(
-          "The number of local devices on each host must be divisible by the"
-          " model dimension as we assume model parallelism across local"
-          f" devices. Got local device count: {jax.local_device_count()} and"
-          f" model parallelism dimension: {mp_dim} for axes: {axes} and mesh"
+          f" processes. Got process count: {num_processes} and data"
+          f" parallelism dimensions: {dp_axis_sizes} for axes: {axes} and mesh"
           f" devices: {self.mesh.devices}."
       )
 
     self.data_sharding = jax.sharding.NamedSharding(
-        self.mesh, jax.sharding.PartitionSpec(dp_axes)
+        self.mesh, jax.sharding.PartitionSpec(dp_axis_names)
     )
     self.state_sharding = None
     self.abstract_batch = None
