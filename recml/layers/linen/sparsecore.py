@@ -44,6 +44,11 @@ EMBEDDING_PARAM_NAME = 'sc_embedding_variables'
 OptimizerSpec = Any
 
 
+def _num_sparsecores_per_device() -> int:
+  """Returns the number of sparsecores per tensorcore device."""
+  return utils.num_sparsecores_per_device()
+
+
 # TODO(aahil): This should be common between Keras, Flax, NNX.
 @dataclasses.dataclass
 class EmbeddingSpec:
@@ -173,7 +178,7 @@ class SparsecoreConfig:
   )
   global_device_count: int = dataclasses.field(default_factory=jax.device_count)
   num_sc_per_device: int = dataclasses.field(
-      default_factory=utils.num_sparsecores_per_device
+      default_factory=_num_sparsecores_per_device
   )
 
   _feature_specs: Mapping[str, embedding_ops.FeatureSpec] | None = (
@@ -350,8 +355,8 @@ class SparsecoreEmbed(nn.Module):
   Attributes:
     sparsecore_config: A sparsecore config specifying how to create the tables.
     mesh: The mesh to use for the embedding layer. If not provided, the global
-      mesh set by `jax.sharding.use_mesh` will be used. If neither is set,
-      an error will be raised.
+      mesh set by `jax.sharding.use_mesh` will be used. If neither is set, an
+      error will be raised.
   """
 
   sparsecore_config: SparsecoreConfig
