@@ -122,6 +122,7 @@ class DLRMModel(nn.Module):
             for f in self.features.sparse_features()
         },
         optimizer=self.embedding_optimizer,
+        allow_id_dropping=True,
     )
     object.__setattr__(self, '_sparsecore_config', sparsecore_config)
     return sparsecore_config

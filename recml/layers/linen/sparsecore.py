@@ -105,6 +105,8 @@ class SparsecoreConfig:
     sharding_strategy: The sharding strategy to use for the embedding table.
       Defaults to 'MOD' sharding. See the sparsecore documentation for more
       details.
+    allow_id_dropping: Whether to allow dropping of IDs that do not fit within
+      the XLA buffers allocated for each partition. Defaults to False.
     num_sc_per_device: The number of sparsecores per Jax device. By default, a
       fixed mapping is used to determine this based on device 0. This may fail
       on newer TPU architectures if the mapping is not updated of if device 0 is
@@ -163,6 +165,7 @@ class SparsecoreConfig:
   optimizer: OptimizerSpec
   sharding_axis: str | int = 0
   sharding_strategy: str = 'MOD'
+  allow_id_dropping: bool = False
 
   # TODO(aahil): Come up with better defaults / heuristics here.
   max_ids_per_partition_fn: Callable[[str, int], int] = dataclasses.field(
@@ -339,7 +342,7 @@ class SparsecorePreprocessor:
         global_device_count=self.sparsecore_config.global_device_count,
         num_sc_per_device=self.sparsecore_config.num_sc_per_device,
         sharding_strategy=self.sparsecore_config.sharding_strategy,
-        allow_id_dropping=False,
+        allow_id_dropping=self.sparsecore_config.allow_id_dropping,
         batch_number=self._batch_number,
     )
 
