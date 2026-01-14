@@ -1,4 +1,4 @@
-"""HSTU Experiment Configuration using Fiddle and RecML"""
+"""HSTU Experiment Configuration using Fiddle and RecML with KerasTrainer"""
 
 import dataclasses
 from typing import Optional
