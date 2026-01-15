@@ -15,6 +15,7 @@
 
 import abc
 from collections.abc import Mapping, Sequence
+import contextlib
 import dataclasses
 import enum
 from typing import Any, Generic, TypeVar
@@ -24,6 +25,13 @@ import jax.numpy as jnp
 from recml.core.data import iterator
 import tensorflow as tf
 
+# Patch jax.spmd_mode if it doesn't exist (removed in newer JAX versions).
+if not hasattr(jax, "spmd_mode"):
+  @contextlib.contextmanager
+  def _spmd_mode(*args, **kwargs):
+    del args, kwargs
+    yield
+  jax.spmd_mode = _spmd_mode
 
 # pylint: disable=logging-fstring-interpolation
 

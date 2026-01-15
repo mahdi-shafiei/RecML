@@ -19,6 +19,12 @@ from collections.abc import Iterator, Mapping, Sequence
 import dataclasses
 from typing import Generic, Literal, TypeVar
 
+import sys
+import os
+# Add the RecML folder to the system path
+sys.path.append(os.path.join(os.getcwd(), "../../../RecML"))
+os.environ["KERAS_BACKEND"] = "jax"
+
 from etils import epy
 import fiddle as fdl
 import flax.linen as nn
