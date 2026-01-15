@@ -22,7 +22,6 @@ from typing import Any, ContextManager
 import flax.linen as nn
 import jax
 import numpy as np
-# FIXED: Use the public experimental module available in JAX 0.4.30
 from recml.core.training import mesh_context
 
 

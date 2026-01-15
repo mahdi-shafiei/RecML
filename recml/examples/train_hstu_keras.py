@@ -15,7 +15,6 @@ from absl import logging
 # Add the RecML folder to the system path
 sys.path.append(os.path.join(os.getcwd(), "../../../RecML"))
 
-# RecML Imports
 from recml.core.training import core
 from recml.core.training import keras_trainer
 from recml.layers.keras import hstu
