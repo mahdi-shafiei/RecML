@@ -68,21 +68,18 @@ class TFDatasetIterator(clu_data.DatasetIterator):
     ) -> np.ndarray | tf.SparseTensor | tf.RaggedTensor:
       if isinstance(x, (tf.SparseTensor, tf.RaggedTensor, np.ndarray)):
         return x
-      # FIX: Check for attribute existence to avoid crashes on non-Tensor objects
       if hasattr(x, "_numpy"):
         numpy = x._numpy()  # pylint: disable=protected-access
       elif hasattr(x, "numpy"):
         numpy = x.numpy()
       else:
-        return x  # Return as-is if it can't be converted
+        return x
 
       if isinstance(numpy, np.ndarray):
-        # `numpy` shares the same underlying buffer as the `x` Tensor.
         # Tensors are expected to be immutable, so we disable writes.
         numpy.setflags(write=False)
       return numpy
 
-    # FIX: Use jax.tree.map instead of tf.nest.map_structure
     return jax.tree.map(_maybe_to_numpy, batch)
 
   @property
@@ -115,7 +112,6 @@ class TFDatasetIterator(clu_data.DatasetIterator):
         )
       return clu_data.ArraySpec(dtype=x.dtype, shape=tuple(x.shape))
 
-    # element_spec = tf.nest.map_structure(_to_element_spec, batch)
     element_spec = jax.tree.map(_to_element_spec, batch)
     self._element_spec = element_spec
     return element_spec

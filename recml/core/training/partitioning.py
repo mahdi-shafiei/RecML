@@ -110,7 +110,6 @@ class DataParallelPartitioner(Partitioner):
   def partition_init(
       self, init_fn: CreateStateFn, *, abstract_batch: PyTree | None = None
   ) -> CreateStateFn:
-    # FIXED: Use 'with self.mesh'
     with self.mesh:
       if abstract_batch is not None:
         mesh_context.set_global_mesh(self.mesh)
@@ -122,7 +121,6 @@ class DataParallelPartitioner(Partitioner):
       init_fn = jax.jit(init_fn, out_shardings=self.state_sharding)
 
     def _wrapped_init(batch: PyTree) -> State:
-      # FIXED: Use 'with self.mesh'
       with self.mesh:
         state = init_fn(batch)
         state = _maybe_unbox_state(state)
@@ -136,7 +134,6 @@ class DataParallelPartitioner(Partitioner):
       jit_kws["out_shardings"] = (self.state_sharding, None)
       jit_kws["donate_argnums"] = (1,)
 
-    # FIXED: Use 'with self.mesh' and legacy bridge
     with self.mesh:
       mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
@@ -146,7 +143,6 @@ class DataParallelPartitioner(Partitioner):
       )
 
     def _wrapped_step(batch: PyTree, state: State) -> Any:
-      # FIXED: Use 'with self.mesh'
       with self.mesh:
         return step_fn(batch, state)
 
@@ -238,9 +234,7 @@ class ModelParallelPartitioner(Partitioner):
           " model parallel partitioner."
       )
 
-    # FIXED: Use 'with self.mesh' directly
     with self.mesh:
-      # FIXED: Legacy bridge
       mesh_context.set_global_mesh(self.mesh)
       abstract_state = jax.eval_shape(init_fn, abstract_batch)
       specs = nn.get_partition_spec(abstract_state)
@@ -254,7 +248,6 @@ class ModelParallelPartitioner(Partitioner):
       compiled_init_fn = jax.jit(init_fn, out_shardings=state_sharding)
 
     def _init(batch: PyTree) -> State:
-      # FIXED: Use 'with self.mesh' directly
       with self.mesh:
         state = compiled_init_fn(batch)
         state = _maybe_unbox_state(state)
@@ -273,7 +266,7 @@ class ModelParallelPartitioner(Partitioner):
     else:
       jit_kws["out_shardings"] = None
 
-    # FIXED: Use 'with self.mesh' directly and legacy bridge
+
     with self.mesh:
       mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
@@ -296,7 +289,6 @@ class ModelParallelPartitioner(Partitioner):
       )
 
     def _step(batch: PyTree, state: State) -> Any:
-      # FIXED: Use 'with self.mesh' directly
       with self.mesh:
         return step_fn(batch, state)
 

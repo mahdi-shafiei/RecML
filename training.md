@@ -69,10 +69,3 @@ CMD ["python", "recml/examples/dlrm_experiment_test.py"]
 ```
 
 You can use this dockerfile to run the DLRM model experiment from this repo in your own environment. 
-
-
-
-
-
-
-
