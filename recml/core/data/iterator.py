@@ -21,6 +21,7 @@ import clu.data as clu_data
 from etils import epath
 import numpy as np
 import tensorflow as tf
+import jax
 
 
 Iterator = clu_data.DatasetIterator
@@ -67,17 +68,22 @@ class TFDatasetIterator(clu_data.DatasetIterator):
     ) -> np.ndarray | tf.SparseTensor | tf.RaggedTensor:
       if isinstance(x, (tf.SparseTensor, tf.RaggedTensor, np.ndarray)):
         return x
+      # FIX: Check for attribute existence to avoid crashes on non-Tensor objects
       if hasattr(x, "_numpy"):
         numpy = x._numpy()  # pylint: disable=protected-access
-      else:
+      elif hasattr(x, "numpy"):
         numpy = x.numpy()
+      else:
+        return x  # Return as-is if it can't be converted
+
       if isinstance(numpy, np.ndarray):
         # `numpy` shares the same underlying buffer as the `x` Tensor.
         # Tensors are expected to be immutable, so we disable writes.
         numpy.setflags(write=False)
       return numpy
 
-    return tf.nest.map_structure(_maybe_to_numpy, batch)
+    # FIX: Use jax.tree.map instead of tf.nest.map_structure
+    return jax.tree.map(_maybe_to_numpy, batch)
 
   @property
   def element_spec(self) -> clu_data.ElementSpec:
@@ -109,7 +115,8 @@ class TFDatasetIterator(clu_data.DatasetIterator):
         )
       return clu_data.ArraySpec(dtype=x.dtype, shape=tuple(x.shape))
 
-    element_spec = tf.nest.map_structure(_to_element_spec, batch)
+    # element_spec = tf.nest.map_structure(_to_element_spec, batch)
+    element_spec = jax.tree.map(_to_element_spec, batch)
     self._element_spec = element_spec
     return element_spec
 

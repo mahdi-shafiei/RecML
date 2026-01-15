@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Utilities for partitioning."""
 
 import abc
@@ -21,6 +22,8 @@ from typing import Any, ContextManager
 import flax.linen as nn
 import jax
 import numpy as np
+# FIXED: Use the public experimental module available in JAX 0.4.30
+from recml.core.training import mesh_context
 
 
 PyTree = Any
@@ -67,7 +70,8 @@ class DataParallelPartitioner(Partitioner):
   """Data parallel partitioner."""
 
   def __init__(self, data_axis: str = "batch"):
-    self.mesh = jax.make_mesh((jax.device_count(),), (data_axis,))
+    devices = jax.devices()
+    self.mesh = jax.sharding.Mesh(devices, (data_axis,))
     self.data_sharding = jax.sharding.NamedSharding(
         self.mesh, jax.sharding.PartitionSpec(data_axis)
     )
@@ -107,8 +111,10 @@ class DataParallelPartitioner(Partitioner):
   def partition_init(
       self, init_fn: CreateStateFn, *, abstract_batch: PyTree | None = None
   ) -> CreateStateFn:
-    with jax.sharding.use_mesh(self.mesh):
+    # FIXED: Use 'with self.mesh'
+    with self.mesh:
       if abstract_batch is not None:
+        mesh_context.set_global_mesh(self.mesh)
         abstract_state = jax.eval_shape(init_fn, abstract_batch)
         specs = nn.get_partition_spec(abstract_state)
         self.state_sharding = jax.tree.map(
@@ -117,7 +123,8 @@ class DataParallelPartitioner(Partitioner):
       init_fn = jax.jit(init_fn, out_shardings=self.state_sharding)
 
     def _wrapped_init(batch: PyTree) -> State:
-      with jax.sharding.use_mesh(self.mesh):
+      # FIXED: Use 'with self.mesh'
+      with self.mesh:
         state = init_fn(batch)
         state = _maybe_unbox_state(state)
         return state
@@ -130,7 +137,9 @@ class DataParallelPartitioner(Partitioner):
       jit_kws["out_shardings"] = (self.state_sharding, None)
       jit_kws["donate_argnums"] = (1,)
 
-    with jax.sharding.use_mesh(self.mesh):
+    # FIXED: Use 'with self.mesh' and legacy bridge
+    with self.mesh:
+      mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
           fn,
           in_shardings=(self.data_sharding, self.state_sharding),
@@ -138,7 +147,8 @@ class DataParallelPartitioner(Partitioner):
       )
 
     def _wrapped_step(batch: PyTree, state: State) -> Any:
-      with jax.sharding.use_mesh(self.mesh):
+      # FIXED: Use 'with self.mesh'
+      with self.mesh:
         return step_fn(batch, state)
 
     return _wrapped_step
@@ -190,7 +200,8 @@ class ModelParallelPartitioner(Partitioner):
     if axis_sizes[0] == -1:
       axis_sizes[0] = len(devices) // math.prod(axis_sizes[1:])
 
-    self.mesh = jax.make_mesh(axis_sizes, axis_names, devices=devices)
+    # self.mesh = jax.make_mesh(axis_sizes, axis_names, devices=devices)
+    self.mesh = jax.sharding.Mesh(devices, axis_names)
     self.rules = rules
     self.aot_compile = aot_compile
     self.options = options
@@ -213,12 +224,6 @@ class ModelParallelPartitioner(Partitioner):
     self.abstract_batch = None
     self.abstract_state = None
 
-  @property
-  def mesh_context_manager(
-      self,
-  ) -> Callable[[jax.sharding.Mesh], ContextManager[None]]:
-    return jax.sharding.use_mesh
-
   def shard_inputs(self, inputs: PyTree) -> PyTree:
     def _shard(x: np.ndarray) -> jax.Array:
       return jax.make_array_from_process_local_data(self.data_sharding, x)
@@ -234,7 +239,10 @@ class ModelParallelPartitioner(Partitioner):
           " model parallel partitioner."
       )
 
-    with self.mesh_context_manager(self.mesh):
+    # FIXED: Use 'with self.mesh' directly
+    with self.mesh:
+      # FIXED: Legacy bridge
+      mesh_context.set_global_mesh(self.mesh)
       abstract_state = jax.eval_shape(init_fn, abstract_batch)
       specs = nn.get_partition_spec(abstract_state)
 
@@ -247,7 +255,8 @@ class ModelParallelPartitioner(Partitioner):
       compiled_init_fn = jax.jit(init_fn, out_shardings=state_sharding)
 
     def _init(batch: PyTree) -> State:
-      with self.mesh_context_manager(self.mesh):
+      # FIXED: Use 'with self.mesh' directly
+      with self.mesh:
         state = compiled_init_fn(batch)
         state = _maybe_unbox_state(state)
       return state
@@ -265,7 +274,9 @@ class ModelParallelPartitioner(Partitioner):
     else:
       jit_kws["out_shardings"] = None
 
-    with self.mesh_context_manager(self.mesh):
+    # FIXED: Use 'with self.mesh' directly and legacy bridge
+    with self.mesh:
+      mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
           fn,
           in_shardings=(self.data_sharding, self.state_sharding),
@@ -286,7 +297,8 @@ class ModelParallelPartitioner(Partitioner):
       )
 
     def _step(batch: PyTree, state: State) -> Any:
-      with self.mesh_context_manager(self.mesh):
+      # FIXED: Use 'with self.mesh' directly
+      with self.mesh:
         return step_fn(batch, state)
 
     return _step

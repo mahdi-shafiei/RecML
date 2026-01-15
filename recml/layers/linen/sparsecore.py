@@ -28,10 +28,12 @@ import numpy as np
 from recml.core.ops import embedding_ops
 import tensorflow as tf
 
+from recml.core.training import mesh_context
+
 
 with epy.lazy_imports():
   # pylint: disable=g-import-not-at-top
-  from jax_tpu_embedding.sparsecore.lib.flax import embed
+  from jax_tpu_embedding.sparsecore.lib.flax.linen import embed
   from jax_tpu_embedding.sparsecore.lib.nn import embedding
   from jax_tpu_embedding.sparsecore.lib.nn import embedding_spec
   from jax_tpu_embedding.sparsecore.lib.nn import table_stacking
@@ -369,16 +371,28 @@ class SparsecoreEmbed(nn.Module):
   sparsecore_config: SparsecoreConfig
   mesh: jax.sharding.Mesh | jax.sharding.AbstractMesh | None = None
 
-  def get_mesh(self) -> jax.sharding.Mesh | jax.sharding.AbstractMesh:
-    if self.mesh is not None:
-      return self.mesh
-    abstract_mesh = jax.sharding.get_abstract_mesh()
-    if not abstract_mesh.shape_tuple:
+  # def get_mesh(self) -> jax.sharding.Mesh | jax.sharding.AbstractMesh:
+  #   if self.mesh is not None:
+  #     return self.mesh
+  #   abstract_mesh = jax.sharding.get_abstract_mesh()
+  #   if not abstract_mesh.shape_tuple:
+  #     raise ValueError(
+  #         'No abstract mesh shape was set with `jax.sharding.use_mesh`. Make'
+  #         ' sure to set the mesh when calling the sparsecore module.'
+  #     )
+  #   return abstract_mesh
+  
+  def get_mesh(self) -> jax.sharding.Mesh:
+    # Try to get the mesh from our custom global context
+    mesh = mesh_context.get_global_mesh()
+
+    if mesh is None:
       raise ValueError(
-          'No abstract mesh shape was set with `jax.sharding.use_mesh`. Make'
-          ' sure to set the mesh when calling the sparsecore module.'
+          "No global mesh found. Make sure to call "
+          "`partitioning.partition_init` (which sets the mesh) "
+          "before initializing SparseCore."
       )
-    return abstract_mesh
+    return mesh
 
   def get_sharding_axis(
       self, mesh: jax.sharding.Mesh | jax.sharding.AbstractMesh

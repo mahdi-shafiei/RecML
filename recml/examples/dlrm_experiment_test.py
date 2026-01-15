@@ -13,6 +13,12 @@
 # limitations under the License.
 """Tests for the DLRM experiment."""
 
+import sys
+import os
+# Add the RecML folder to the system path
+sys.path.append(os.path.join(os.getcwd(), "../../../RecML"))
+os.environ["KERAS_BACKEND"] = "jax"
+
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import selectors
@@ -32,8 +38,8 @@ class DLRMExperimentTest(absltest.TestCase):
 
     experiment = dlrm_experiment.experiment()
 
-    experiment.task.train_data.global_batch_size = 4
-    experiment.task.eval_data.global_batch_size = 4
+    experiment.task.train_data.global_batch_size = 128
+    experiment.task.eval_data.global_batch_size = 128
     experiment.trainer.train_steps = 12
     experiment.trainer.steps_per_loop = 4
     experiment.trainer.steps_per_eval = 4
