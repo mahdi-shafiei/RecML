@@ -198,7 +198,7 @@ def experiment() -> fdl.Config[recml.Experiment]:
     """Defines the experiment structure using Fiddle configs"""
     
     max_seq_len = 50
-    batch_size = 128
+    batch_size = 64
     
     model_cfg = fdl.Config(
         HSTUModelConfig,

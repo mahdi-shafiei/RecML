@@ -40,7 +40,8 @@ class PartitioningTest(parameterized.TestCase):
       self, partitioner_cls: type[partitioning.Partitioner]
   ):
     if partitioner_cls is partitioning.ModelParallelPartitioner:
-      kwargs = {"axes": [("data", -1), ("model", 1)], "dp_axes": 1}
+      devs = np.array(jax.devices()).reshape(-1, 1)
+      kwargs = {"axes": [("data", -1), ("model", 1)], "dp_axes": 1, "devices": devs}
     else:
       kwargs = {}
     partitioner = partitioner_cls(**kwargs)
@@ -112,8 +113,12 @@ class PartitioningTest(parameterized.TestCase):
     )
 
   def test_model_parallelism(self):
+    devs = np.array(jax.devices()).reshape(1, -1)
+    
     partitioner = partitioning.ModelParallelPartitioner(
-        axes=[("data", 1), ("model", jax.device_count())], dp_axes=1
+        axes=[("data", 1), ("model", jax.device_count())], 
+        dp_axes=1,
+        devices=devs
     )
 
     inputs = np.zeros((128, 16), dtype=np.float32)
