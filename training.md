@@ -1,6 +1,6 @@
 # Model Training Guide
 
-This guide explains how to set up the environment and train the HSTU/DLRM models on Cloud TPU v6 (or other TPU generations).
+This guide explains how to set up the environment and train the HSTU/DLRM models on Cloud TPU v6.
 
 ## Option 1: Virtual Environment (Recommended for Dev)
 
@@ -10,14 +10,6 @@ If you are developing on a TPU VM directly, use a virtual environment to avoid c
 Ensure you have **Python 3.11+** installed.
 ```bash
 python3 --version
-```
-#### Create the venv\
-```bash
-python3 -m venv venv
-```
-#### Activate it
-```bash
-source venv/bin/activate
 ```
 
 ### 2. Create and Activate Virtual Environment
@@ -38,7 +30,7 @@ We need to force a specific version of Protobuf to ensure compatibility with our
 ```bash
 pip install "protobuf>=6.31.1" --no-deps
 ```
-The --no-deps flag is required to prevent pip from downgrading it due to strict dependency pinning in other libraries.
+The `--no-deps` flag is required to prevent pip from downgrading it due to strict dependency pinning in other libraries.
 
 ### 4. Run the Training for DLRM
 ```bash
@@ -50,7 +42,7 @@ python dlrm_experiment_test.py
 If you prefer not to manage a virtual environment or want to deploy this as a container, you can build a Docker image.
 
 ## 1. Build the Image
-reate a file named `Dockerfile` in the root of the repository:
+Create a file named `Dockerfile` in the root of the repository:
 
 ```dockerfile
 # Use an official Python 3.11 runtime as a parent image
