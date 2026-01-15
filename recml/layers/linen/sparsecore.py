@@ -28,9 +28,6 @@ import numpy as np
 from recml.core.ops import embedding_ops
 import tensorflow as tf
 
-from recml.core.training import mesh_context
-
-
 with epy.lazy_imports():
   # pylint: disable=g-import-not-at-top
   from jax_tpu_embedding.sparsecore.lib.flax.linen import embed
@@ -177,7 +174,6 @@ class SparsecoreConfig:
       dataclasses.field(default=lambda n, bs: bs)
   )
 
-  # Optional device information.
   local_device_count: int = dataclasses.field(
       default_factory=jax.local_device_count
   )
@@ -369,19 +365,9 @@ class SparsecoreEmbed(nn.Module):
   """
 
   sparsecore_config: SparsecoreConfig
-  mesh: jax.sharding.Mesh | jax.sharding.AbstractMesh | None = None
-
-  def get_mesh(self) -> jax.sharding.Mesh:
-    # Try to get the mesh from our custom global context
-    mesh = mesh_context.get_global_mesh()
-
-    if mesh is None:
-      raise ValueError(
-          "No global mesh found. Make sure to call "
-          "`partitioning.partition_init` (which sets the mesh) "
-          "before initializing SparseCore."
-      )
-    return mesh
+  mesh: jax.sharding.Mesh = dataclasses.field(
+      default_factory=lambda: jax.sharding.Mesh(jax.devices(), ('batch',))
+  )
 
   def get_sharding_axis(
       self, mesh: jax.sharding.Mesh | jax.sharding.AbstractMesh
@@ -391,25 +377,25 @@ class SparsecoreEmbed(nn.Module):
     return self.sparsecore_config.sharding_axis
 
   def setup(self):
-    mesh = self.get_mesh()
-    sharding_axis_name = self.get_sharding_axis(mesh)
 
+    sharding_axis_name = self.get_sharding_axis(self.mesh)
+    
     initializer = functools.partial(
         embedding.init_embedding_variables,
         table_specs=embedding.get_table_specs(
             self.sparsecore_config.feature_specs
         ),
         global_sharding=jax.sharding.NamedSharding(
-            mesh, jax.sharding.PartitionSpec(sharding_axis_name, None)
+            self.mesh, jax.sharding.PartitionSpec(sharding_axis_name, None)
         ),
         num_sparsecore_per_device=self.sparsecore_config.num_sc_per_device,
         # We need to by-pass the mesh check to allow using an abstract mesh.
-        bypass_mesh_check=isinstance(mesh, jax.sharding.AbstractMesh),
+        bypass_mesh_check=isinstance(self.mesh, jax.sharding.AbstractMesh),
     )
     self.embedding_table = self.param(
         name=EMBEDDING_PARAM_NAME,
         init_fn=embed.with_sparsecore_layout(
-            initializer, (sharding_axis_name,), mesh  # type: ignore
+            initializer, (sharding_axis_name,), self.mesh  # type: ignore
         ),
     )
 
@@ -426,12 +412,13 @@ class SparsecoreEmbed(nn.Module):
     Returns:
       The activations structure with the same structure as specs.
     """
-    mesh = self.get_mesh()
-    sharding_axis_name = self.get_sharding_axis(mesh)
+    # mesh = self.get_mesh()
+    sharding_axis_name = self.get_sharding_axis(self.mesh)
+    
     activations = embedding_ops.sparsecore_lookup(
         embedding_ops.SparsecoreParams(
             feature_specs=self.sparsecore_config.feature_specs,
-            mesh=mesh,
+            mesh=self.mesh,
             data_axes=(sharding_axis_name,),
             embedding_axes=(sharding_axis_name, None),
             sharding_strategy=self.sparsecore_config.sharding_strategy,

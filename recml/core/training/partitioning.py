@@ -22,8 +22,6 @@ from typing import Any, ContextManager
 import flax.linen as nn
 import jax
 import numpy as np
-from recml.core.training import mesh_context
-
 
 PyTree = Any
 State = Any
@@ -112,7 +110,6 @@ class DataParallelPartitioner(Partitioner):
   ) -> CreateStateFn:
     with self.mesh:
       if abstract_batch is not None:
-        mesh_context.set_global_mesh(self.mesh)
         abstract_state = jax.eval_shape(init_fn, abstract_batch)
         specs = nn.get_partition_spec(abstract_state)
         self.state_sharding = jax.tree.map(
@@ -135,7 +132,6 @@ class DataParallelPartitioner(Partitioner):
       jit_kws["donate_argnums"] = (1,)
 
     with self.mesh:
-      mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
           fn,
           in_shardings=(self.data_sharding, self.state_sharding),
@@ -195,7 +191,6 @@ class ModelParallelPartitioner(Partitioner):
     if axis_sizes[0] == -1:
       axis_sizes[0] = len(devices) // math.prod(axis_sizes[1:])
 
-    # self.mesh = jax.make_mesh(axis_sizes, axis_names, devices=devices)
     self.mesh = jax.sharding.Mesh(devices, axis_names)
     self.rules = rules
     self.aot_compile = aot_compile
@@ -235,7 +230,6 @@ class ModelParallelPartitioner(Partitioner):
       )
 
     with self.mesh:
-      mesh_context.set_global_mesh(self.mesh)
       abstract_state = jax.eval_shape(init_fn, abstract_batch)
       specs = nn.get_partition_spec(abstract_state)
 
@@ -268,7 +262,6 @@ class ModelParallelPartitioner(Partitioner):
 
 
     with self.mesh:
-      mesh_context.set_global_mesh(self.mesh)
       step_fn = jax.jit(
           fn,
           in_shardings=(self.data_sharding, self.state_sharding),

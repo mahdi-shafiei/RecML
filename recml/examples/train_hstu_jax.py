@@ -184,14 +184,6 @@ class HSTUTask(jax_trainer.JaxTask):
         targets = jnp.squeeze(targets)
         metrics = {"loss": clu_metrics.Average.from_model_output(loss)}
 
-        # def get_acc(k):
-        #     _, top_k_indices = jax.nn.top_k(logits, k)
-        #     correct = jnp.sum(top_k_indices == targets[:, None], axis=-1)
-        #     return jnp.mean(correct)
-
-        # metrics["HR_10"] = clu_metrics.Average.from_model_output(get_acc(10))
-        # metrics["HR_50"] = clu_metrics.Average.from_model_output(get_acc(50))
-        # metrics["HR_200"] = clu_metrics.Average.from_model_output(get_acc(200))
         return metrics
 
 def experiment() -> fdl.Config[recml.Experiment]:
