@@ -41,7 +41,7 @@ python dlrm_experiment_test.py
 
 If you prefer not to manage a virtual environment or want to deploy this as a container, you can build a Docker image.
 
-### 1. Create a Dckerfile
+### 1. Create a Dockerfile
 Create a file named `Dockerfile` in the root of the repository:
 
 ```dockerfile
