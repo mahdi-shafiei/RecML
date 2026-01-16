@@ -6,7 +6,7 @@ This guide explains how to set up the environment and train the HSTU/DLRM models
 
 If you are developing on a TPU VM directly, use a virtual environment to avoid conflicts with the system-level Python packages.
 
-#### 1. Prerequisites
+### 1. Prerequisites
 Ensure you have **Python 3.11+** installed.
 ```bash
 python3 --version
@@ -41,7 +41,7 @@ python dlrm_experiment_test.py
 
 If you prefer not to manage a virtual environment or want to deploy this as a container, you can build a Docker image.
 
-## 1. Create a Dckerfile
+### 1. Create a Dckerfile
 Create a file named `Dockerfile` in the root of the repository:
 
 ```dockerfile
@@ -73,7 +73,7 @@ CMD ["python", "recml/examples/dlrm_experiment_test.py"]
 
 You can use this dockerfile to run the DLRM model experiment from this repo in your own environment. 
 
-## 2. Build the Image
+### 2. Build the Image
 
 Run this command from the root of the repository. It reads the `Dockerfile`, installs all dependencies, and creates a ready-to-run image.
 
@@ -81,7 +81,7 @@ Run this command from the root of the repository. It reads the `Dockerfile`, ins
 docker build -t recml-training .
 ```
 
-## 3. Run the Image
+### 3. Run the Image
 
 ```bash
 docker run --rm --privileged \
