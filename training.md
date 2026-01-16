@@ -41,7 +41,7 @@ python dlrm_experiment_test.py
 
 If you prefer not to manage a virtual environment or want to deploy this as a container, you can build a Docker image.
 
-## 1. Build the Image
+## 1. Create a Dckerfile
 Create a file named `Dockerfile` in the root of the repository:
 
 ```dockerfile
@@ -53,6 +53,9 @@ WORKDIR /app
 
 # Copy the current directory contents into the container
 COPY . /app
+
+# This tells Python to look in /app for the 'recml' package
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 # Install system tools if needed (e.g., git)
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
@@ -69,3 +72,27 @@ CMD ["python", "recml/examples/dlrm_experiment_test.py"]
 ```
 
 You can use this dockerfile to run the DLRM model experiment from this repo in your own environment. 
+
+## 2. Build the Image
+
+Run this command from the root of the repository. It reads the `Dockerfile`, installs all dependencies, and creates a ready-to-run image.
+
+```bash
+docker build -t recml-training .
+```
+
+## 3. Run the Image
+
+```bash
+docker run --rm --privileged \
+  --net=host \
+  --ipc=host \
+  --name recml-experiment \
+  recml-training
+```
+
+### What is happening here?
+* **`--rm`**: Automatically deletes the container after the script finishes to keep your disk clean.
+* **`--privileged`**: Grants the container direct access to the host's hardware devices, which is required to see the physical TPU chips.
+* **`--net=host`**: Removes the container's network isolation, allowing the script to connect to the TPU runtime listening on local ports (e.g., 8353).
+* **`--ipc=host`**: Allows the container to use the host's Shared Memory (IPC), which is critical for high-speed data transfer between the CPU and TPU.
